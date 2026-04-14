@@ -10,7 +10,6 @@ export interface ExtensionSettings {
   version: string;
   formatVersion: string;
   profileId: string;
-  maxResponseToken: number;
   autoMode: AutoModeOptions;
   schemaPreset: string;
   schemaPresets: Record<string, Schema>;
@@ -146,7 +145,6 @@ export const defaultSettings: ExtensionSettings = {
   version: VERSION,
   formatVersion: FORMAT_VERSION,
   profileId: '',
-  maxResponseToken: 16000,
   autoMode: AutoModeOptions.NONE,
   schemaPreset: 'default',
   schemaPresets: {

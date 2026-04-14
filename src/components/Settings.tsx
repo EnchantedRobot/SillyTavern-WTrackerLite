@@ -107,11 +107,11 @@ export const WTrackerLiteSettings: FC = () => {
     });
   };
 
-  // Restore the current schema preset to its default values
-  const restoreSchemaToDefault = async () => {
+  // Restore only the JSON schema value for the current preset
+  const restoreSchemaValueToDefault = async () => {
     const confirm = await SillyTavern.getContext().Popup.show.confirm(
       'Restore Default',
-      'Are you sure you want to restore the default schema and HTML for this preset?',
+      'Are you sure you want to restore the default JSON schema for this preset?',
     );
     if (!confirm) return;
 
@@ -121,15 +121,31 @@ export const WTrackerLiteSettings: FC = () => {
       if (preset) {
         s.schemaPresets = {
           ...s.schemaPresets,
-          [currentPresetKey]: {
-            ...preset,
-            value: DEFAULT_SCHEMA_VALUE,
-            html: DEFAULT_SCHEMA_HTML,
-          },
+          [currentPresetKey]: { ...preset, value: DEFAULT_SCHEMA_VALUE },
         };
       }
     });
     setSchemaText(JSON.stringify(DEFAULT_SCHEMA_VALUE, null, 2));
+  };
+
+  // Restore only the HTML template for the current preset
+  const restoreSchemaHtmlToDefault = async () => {
+    const confirm = await SillyTavern.getContext().Popup.show.confirm(
+      'Restore Default',
+      'Are you sure you want to restore the default HTML template for this preset?',
+    );
+    if (!confirm) return;
+
+    const currentPresetKey = settings.schemaPreset;
+    updateAndRefresh((s) => {
+      const preset = s.schemaPresets[currentPresetKey];
+      if (preset) {
+        s.schemaPresets = {
+          ...s.schemaPresets,
+          [currentPresetKey]: { ...preset, html: DEFAULT_SCHEMA_HTML },
+        };
+      }
+    });
   };
 
   return (
@@ -140,21 +156,27 @@ export const WTrackerLiteSettings: FC = () => {
           <div className="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
         </div>
         <div className="inline-drawer-content">
-          <div className="wtrackerlite-container">
-            <div className="setting-row">
-              <label>Connection Profile</label>
-              <STConnectionProfileSelect
-                initialSelectedProfileId={settings.profileId}
-                onChange={(profile) =>
-                  updateAndRefresh((s) => {
-                    s.profileId = profile?.id ?? '';
-                  })
-                }
-              />
-            </div>
 
+          {/* ── Connection Profile ── */}
+          <hr />
+          <h4 className="textAlignCenter">Connection Profile</h4>
+          <div className="wtrackerlite-section">
+            <STConnectionProfileSelect
+              initialSelectedProfileId={settings.profileId}
+              onChange={(profile) =>
+                updateAndRefresh((s) => {
+                  s.profileId = profile?.id ?? '';
+                })
+              }
+            />
+          </div>
+
+          {/* ── General Settings ── */}
+          <hr />
+          <h4 className="textAlignCenter">General Settings</h4>
+          <div className="wtrackerlite-section">
             <div className="setting-row">
-              <label>Auto Mode</label>
+              <label title="When to automatically run the tracker. 'Responses' triggers after AI messages, 'Inputs' after user messages, 'Both' for all messages.">Mode</label>
               <select
                 className="text_pole"
                 value={settings.autoMode}
@@ -165,121 +187,113 @@ export const WTrackerLiteSettings: FC = () => {
                 }
               >
                 <option value="none">None</option>
-                <option value="responses">Process responses</option>
-                <option value="inputs">Process inputs</option>
-                <option value="both">Process both</option>
+                <option value="responses">Responses</option>
+                <option value="inputs">Inputs</option>
+                <option value="both">Both</option>
               </select>
-              <div className="number-row">
-                <input
-                  type="number"
-                  className="text_pole"
-                  min="1"
-                  step="1"
-                  value={settings.maxResponseToken}
-                  onChange={(e) =>
-                    updateAndRefresh((s) => {
-                      s.maxResponseToken = parseInt(e.target.value) || 0;
-                    })
-                  }
-                />
-                <label>Max Response Tokens</label>
-              </div>
-              <div className="number-row">
-                <input
-                  type="number"
-                  className="text_pole"
-                  min="0"
-                  step="1"
-                  value={settings.includeLastXMessages}
-                  onChange={(e) =>
-                    updateAndRefresh((s) => {
-                      s.includeLastXMessages = parseInt(e.target.value) || 0;
-                    })
-                  }
-                />
-                <label>Last X Messages (0 = all)</label>
-              </div>
-              <div className="number-row">
-                <input
-                  type="number"
-                  className="text_pole"
-                  min="0"
-                  step="1"
-                  value={settings.includeLastXWTrackerLiteMessages}
-                  onChange={(e) =>
-                    updateAndRefresh((s) => {
-                      s.includeLastXWTrackerLiteMessages = parseInt(e.target.value) || 0;
-                    })
-                  }
-                />
-                <label>Last X WTrackerLite Messages</label>
-              </div>
-              <div className="number-row">
-                <input
-                  type="checkbox"
-                  checked={settings.skipFirst}
-                  onChange={(e) =>
-                    updateAndRefresh((s) => {
-                      s.skipFirst = e.target.checked;
-                    })
-                  }
-                />
-                <label>Skip First Message</label>
-              </div>
             </div>
-
-            <div className="setting-row">
-              <label>Schema Preset</label>
-              <STPresetSelect
-                label="Schema Preset"
-                items={schemaPresetItems}
-                value={settings.schemaPreset}
-                onChange={handleSchemaPresetChange}
-                onItemsChange={handleSchemaPresetsListChange}
-                readOnlyValues={['default']}
-                enableCreate
-                enableDelete
-                enableRename
-              />
-
-              <div className="label-row">
-                <label>Schema</label>
-                <STButton className="fa-solid fa-undo" title="Restore default" onClick={restoreSchemaToDefault} />
-              </div>
-
-              <STTextarea value={schemaText} onChange={(e) => handleSchemaValueChange(e.target.value)} rows={4} />
-              <STTextarea
-                value={settings.schemaPresets[settings.schemaPreset]?.html ?? ''}
-                onChange={(e) => handleSchemaHtmlChange(e.target.value)}
-                rows={4}
-                placeholder="Enter your schema HTML here..."
-              />
-            </div>
-
-            <div className="setting-row">
-              <div className="label-row">
-                <label>Prompt</label>
-                <STButton
-                  className="fa-solid fa-undo"
-                  title="Restore main context template to default"
-                  onClick={() =>
-                    updateAndRefresh((s) => {
-                      s.promptJson = DEFAULT_PROMPT_JSON;
-                    })
-                  }
-                />
-              </div>
-              <STTextarea
-                value={settings.promptJson}
+            <div className="number-row">
+              <input
+                type="number"
+                className="text_pole"
+                min="0"
+                step="1"
+                value={settings.includeLastXMessages}
                 onChange={(e) =>
                   updateAndRefresh((s) => {
-                    s.promptJson = e.target.value;
+                    s.includeLastXMessages = parseInt(e.target.value) || 0;
                   })
                 }
-                rows={4}
               />
+              <label title="How many recent chat messages to send to the tracker AI as context. Set to 0 to include the entire chat history.">Include Last N Messages (0 = all)</label>
+            </div>
+            <div className="number-row">
+              <input
+                type="number"
+                className="text_pole"
+                min="0"
+                step="1"
+                value={settings.includeLastXWTrackerLiteMessages}
+                onChange={(e) =>
+                  updateAndRefresh((s) => {
+                    s.includeLastXWTrackerLiteMessages = parseInt(e.target.value) || 0;
+                  })
+                }
+              />
+              <label title="How many previous tracker outputs to inject into the chat context before generating a new tracker. Helps the AI maintain continuity. Set to 0 to disable.">Inject Last N Trackers</label>
+            </div>
+            <div className="number-row">
+              <input
+                type="checkbox"
+                checked={settings.skipFirst}
+                onChange={(e) =>
+                  updateAndRefresh((s) => {
+                    s.skipFirst = e.target.checked;
+                  })
+                }
+              />
+              <label title="Skip running the tracker on the very first message of a chat, where there may not be enough context yet.">Skip First Message</label>
             </div>
           </div>
+
+          {/* ── Schema Settings ── */}
+          <hr />
+          <h4 className="textAlignCenter">Schema Settings</h4>
+          <div className="wtrackerlite-section">
+            <STPresetSelect
+              label="Schema Preset"
+              items={schemaPresetItems}
+              value={settings.schemaPreset}
+              onChange={handleSchemaPresetChange}
+              onItemsChange={handleSchemaPresetsListChange}
+              readOnlyValues={['default']}
+              enableCreate
+              enableDelete
+              enableRename
+            />
+            <div className="label-row" style={{ marginTop: '8px' }}>
+              <label title="The system prompt sent to the tracker AI. Use {{schema}} and {{example_response}} as placeholders.">Prompt</label>
+              <STButton
+                className="fa-solid fa-undo"
+                title="Restore default prompt"
+                onClick={async () => {
+                  const confirm = await SillyTavern.getContext().Popup.show.confirm(
+                    'Restore Default',
+                    'Are you sure you want to restore the default prompt?',
+                  );
+                  if (!confirm) return;
+                  updateAndRefresh((s) => {
+                    s.promptJson = DEFAULT_PROMPT_JSON;
+                  });
+                }}
+              />
+            </div>
+            <STTextarea
+              value={settings.promptJson}
+              onChange={(e) =>
+                updateAndRefresh((s) => {
+                  s.promptJson = e.target.value;
+                })
+              }
+              rows={4}
+            />
+            <div className="label-row" style={{ marginTop: '8px' }}>
+              <label title="The JSON schema that defines the structure of the tracker output. The AI will generate a JSON object conforming to this schema.">JSON Schema</label>
+              <STButton className="fa-solid fa-undo" title="Restore default JSON schema" onClick={restoreSchemaValueToDefault} />
+            </div>
+            <STTextarea value={schemaText} onChange={(e) => handleSchemaValueChange(e.target.value)} rows={4} />
+            <div className="label-row" style={{ marginTop: '8px' }}>
+              <label title="Handlebars HTML template used to render the tracker display in the chat. Use {{data.field}} to reference tracker values.">HTML Template</label>
+              <STButton className="fa-solid fa-undo" title="Restore default HTML template" onClick={restoreSchemaHtmlToDefault} />
+            </div>
+            <STTextarea
+              value={settings.schemaPresets[settings.schemaPreset]?.html ?? ''}
+              onChange={(e) => handleSchemaHtmlChange(e.target.value)}
+              rows={4}
+              placeholder="Enter your HTML template here..."
+            />
+          </div>
+
         </div>
       </div>
     </div>
