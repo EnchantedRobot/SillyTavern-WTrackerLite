@@ -10,12 +10,9 @@ import { ExtensionSettingsManager } from 'sillytavern-utils-lib';
 import {
   ExtensionSettings,
   Schema,
-  DEFAULT_PROMPT,
   DEFAULT_PROMPT_JSON,
-  DEFAULT_PROMPT_XML,
   DEFAULT_SCHEMA_VALUE,
   DEFAULT_SCHEMA_HTML,
-  PromptEngineeringMode,
   defaultSettings,
   EXTENSION_KEY,
 } from '../config.js';
@@ -25,7 +22,7 @@ import { useForceUpdate } from '../hooks/useForceUpdate.js';
 // Initialize the settings manager once, outside the component
 export const settingsManager = new ExtensionSettingsManager<ExtensionSettings>(EXTENSION_KEY, defaultSettings);
 
-export const WTrackerSettings: FC = () => {
+export const WTrackerLiteSettings: FC = () => {
   const forceUpdate = useForceUpdate();
   const settings = settingsManager.getSettings();
   const [schemaText, setSchemaText] = useState(
@@ -136,14 +133,14 @@ export const WTrackerSettings: FC = () => {
   };
 
   return (
-    <div className="wtracker-settings">
+    <div className="wtrackerlite-settings">
       <div className="inline-drawer">
         <div className="inline-drawer-toggle inline-drawer-header">
-          <b>WTracker</b>
+          <b>WTrackerLite</b>
           <div className="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
         </div>
         <div className="inline-drawer-content">
-          <div className="wtracker-container">
+          <div className="wtrackerlite-container">
             <div className="setting-row">
               <label>Connection Profile</label>
               <STConnectionProfileSelect
@@ -172,23 +169,63 @@ export const WTrackerSettings: FC = () => {
                 <option value="inputs">Process inputs</option>
                 <option value="both">Process both</option>
               </select>
-            </div>
-
-            <div className="setting-row">
-              <label>Prompt Engineering</label>
-              <select
-                className="text_pole"
-                value={settings.promptEngineeringMode}
-                onChange={(e) =>
-                  updateAndRefresh((s) => {
-                    s.promptEngineeringMode = e.target.value as PromptEngineeringMode;
-                  })
-                }
-              >
-                <option value="native">Native API</option>
-                <option value="json">Prompt Engineering (JSON)</option>
-                <option value="xml">Prompt Engineering (XML)</option>
-              </select>
+              <div className="number-row">
+                <input
+                  type="number"
+                  className="text_pole"
+                  min="1"
+                  step="1"
+                  value={settings.maxResponseToken}
+                  onChange={(e) =>
+                    updateAndRefresh((s) => {
+                      s.maxResponseToken = parseInt(e.target.value) || 0;
+                    })
+                  }
+                />
+                <label>Max Response Tokens</label>
+              </div>
+              <div className="number-row">
+                <input
+                  type="number"
+                  className="text_pole"
+                  min="0"
+                  step="1"
+                  value={settings.includeLastXMessages}
+                  onChange={(e) =>
+                    updateAndRefresh((s) => {
+                      s.includeLastXMessages = parseInt(e.target.value) || 0;
+                    })
+                  }
+                />
+                <label>Last X Messages (0 = all)</label>
+              </div>
+              <div className="number-row">
+                <input
+                  type="number"
+                  className="text_pole"
+                  min="0"
+                  step="1"
+                  value={settings.includeLastXWTrackerLiteMessages}
+                  onChange={(e) =>
+                    updateAndRefresh((s) => {
+                      s.includeLastXWTrackerLiteMessages = parseInt(e.target.value) || 0;
+                    })
+                  }
+                />
+                <label>Last X WTrackerLite Messages</label>
+              </div>
+              <div className="number-row">
+                <input
+                  type="checkbox"
+                  checked={settings.skipFirst}
+                  onChange={(e) =>
+                    updateAndRefresh((s) => {
+                      s.skipFirst = e.target.checked;
+                    })
+                  }
+                />
+                <label>Skip First Message</label>
+              </div>
             </div>
 
             <div className="setting-row">
@@ -205,8 +242,8 @@ export const WTrackerSettings: FC = () => {
                 enableRename
               />
 
-              <div className="title_restorable">
-                <span>Schema</span>
+              <div className="label-row">
+                <label>Schema</label>
                 <STButton className="fa-solid fa-undo" title="Restore default" onClick={restoreSchemaToDefault} />
               </div>
 
@@ -220,32 +257,8 @@ export const WTrackerSettings: FC = () => {
             </div>
 
             <div className="setting-row">
-              <div className="title_restorable">
-                <span>Prompt</span>
-                <STButton
-                  className="fa-solid fa-undo"
-                  title="Restore main context template to default"
-                  onClick={() =>
-                    updateAndRefresh((s) => {
-                      s.prompt = DEFAULT_PROMPT;
-                    })
-                  }
-                />
-              </div>
-              <STTextarea
-                value={settings.prompt}
-                onChange={(e) =>
-                  updateAndRefresh((s) => {
-                    s.prompt = e.target.value;
-                  })
-                }
-                rows={4}
-              />
-            </div>
-
-            <div className="setting-row">
-              <div className="title_restorable">
-                <span>Prompt (JSON)</span>
+              <div className="label-row">
+                <label>Prompt</label>
                 <STButton
                   className="fa-solid fa-undo"
                   title="Restore main context template to default"
@@ -264,78 +277,6 @@ export const WTrackerSettings: FC = () => {
                   })
                 }
                 rows={4}
-              />
-            </div>
-
-            <div className="setting-row">
-              <div className="title_restorable">
-                <span>Prompt (XML)</span>
-                <STButton
-                  className="fa-solid fa-undo"
-                  title="Restore main context template to default"
-                  onClick={() =>
-                    updateAndRefresh((s) => {
-                      s.promptXml = DEFAULT_PROMPT_XML;
-                    })
-                  }
-                />
-              </div>
-              <STTextarea
-                value={settings.promptXml}
-                onChange={(e) =>
-                  updateAndRefresh((s) => {
-                    s.promptXml = e.target.value;
-                  })
-                }
-                rows={4}
-              />
-            </div>
-
-            <div className="setting-row">
-              <label>Max Response Tokens</label>
-              <input
-                type="number"
-                className="text_pole"
-                min="1"
-                step="1"
-                value={settings.maxResponseToken}
-                onChange={(e) =>
-                  updateAndRefresh((s) => {
-                    s.maxResponseToken = parseInt(e.target.value) || 0;
-                  })
-                }
-              />
-            </div>
-            <div className="setting-row">
-              <label>Include Last X Messages (0 means all, 1 means last)</label>
-              <input
-                type="number"
-                className="text_pole"
-                min="0"
-                step="1"
-                title="0 means all messages."
-                value={settings.includeLastXMessages}
-                onChange={(e) =>
-                  updateAndRefresh((s) => {
-                    s.includeLastXMessages = parseInt(e.target.value) || 0;
-                  })
-                }
-              />
-            </div>
-            <div className="setting-row">
-              <label>Include Last X WTracker Messages</label>
-              <input
-                type="number"
-                className="text_pole"
-                min="0"
-                step="1"
-                title="0 means none."
-                value={settings.includeLastXWTrackerMessages}
-                onChange={(e) =>
-                  updateAndRefresh((s) => {
-                    s.includeLastXWTrackerMessages = parseInt(e.target.value) || 0;
-                  })
-                }
               />
             </div>
           </div>

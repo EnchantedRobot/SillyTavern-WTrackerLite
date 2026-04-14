@@ -1,12 +1,12 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import { settingsManager, WTrackerSettings } from './components/Settings.js';
+import { settingsManager, WTrackerLiteSettings } from './components/Settings.js';
 
-import { buildPrompt, Message, Generator } from 'sillytavern-utils-lib';
-import { ChatMessage, EventNames, ExtractedData } from 'sillytavern-utils-lib/types';
-import { characters, name1, selected_group, st_echo } from 'sillytavern-utils-lib/config';
+import { EventNames } from 'sillytavern-utils-lib/types';
 import { AutoModeOptions } from 'sillytavern-utils-lib/types/translate';
-import { ExtensionSettings, PromptEngineeringMode, EXTENSION_KEY, extensionName } from './config.js';
+
+declare const toastr: any;
+import { ExtensionSettings, EXTENSION_KEY } from './config.js';
 import { parseResponse } from './parser.js';
 import { schemaToExample } from './schema-to-example.js';
 import * as Handlebars from 'handlebars';
@@ -18,8 +18,6 @@ const CHAT_MESSAGE_SCHEMA_VALUE_KEY = 'value';
 const CHAT_MESSAGE_SCHEMA_HTML_KEY = 'html';
 
 const globalContext = SillyTavern.getContext();
-const generator = new Generator();
-const pendingRequests = new Map<number, string>();
 const incomingTypes = [AutoModeOptions.RESPONSES, AutoModeOptions.BOTH];
 const outgoingTypes = [AutoModeOptions.INPUT, AutoModeOptions.BOTH];
 
@@ -38,7 +36,7 @@ if (!Handlebars.helpers['join']) {
 function renderTracker(messageId: number) {
   const message = globalContext.chat[messageId];
   const messageBlock = document.querySelector(`.mes[mesid="${messageId}"]`);
-  messageBlock?.querySelector('.mes_wtracker')?.remove();
+  messageBlock?.querySelector('.mes_wtrackerlite')?.remove();
 
   if (!message?.extra?.[EXTENSION_KEY]) return;
 
@@ -51,53 +49,67 @@ function renderTracker(messageId: number) {
   const template = Handlebars.compile(trackerHtmlSchema, { noEscape: true, strict: true });
   const renderedHtml = template({ data: trackerData });
   const container = document.createElement('div');
-  container.className = 'mes_wtracker';
+  container.className = 'mes_wtrackerlite';
   container.innerHTML = renderedHtml;
 
   // Add controls
   const controls = document.createElement('div');
-  controls.className = 'wtracker-controls';
+  controls.className = 'wtrackerlite-controls';
   controls.innerHTML = `
-    <div class="wtracker-regenerate-button fa-solid fa-arrows-rotate" title="Regenerate Tracker"></div>
-    <div class="wtracker-edit-button fa-solid fa-code" title="Edit Tracker Data"></div>
-    <div class="wtracker-delete-button fa-solid fa-trash-can" title="Delete Tracker"></div>
+    <div class="wtrackerlite-regenerate-button fa-solid fa-arrows-rotate" title="Regenerate Tracker"></div>
+    <div class="wtrackerlite-edit-button fa-solid fa-code" title="Edit Tracker Data"></div>
+    <div class="wtrackerlite-delete-button fa-solid fa-trash-can" title="Delete Tracker"></div>
   `;
   container.prepend(controls);
 
   messageBlock.querySelector('.mes_text')?.before(container);
 }
 
-function includeWTrackerMessages<T extends Message | ChatMessage>(messages: T[], settings: ExtensionSettings): T[] {
-  let copyMessages = structuredClone(messages);
-  if (settings.includeLastXWTrackerMessages > 0) {
-    for (let i = 0; i < settings.includeLastXWTrackerMessages; i++) {
-      let foundMessage: T | null = null;
+function toLabel(key: string): string {
+  return key.replace(/([A-Z])/g, ' $1').replace(/^./, (s) => s.toUpperCase());
+}
+
+function formatTrackerForContext(data: any): string {
+  const lines: string[] = ['[Scene Tracker]'];
+  for (const [key, value] of Object.entries(data)) {
+    const label = toLabel(key);
+    if (Array.isArray(value)) {
+      if (value.length === 0) {
+        lines.push(`${label}: (none)`);
+      } else if (typeof value[0] !== 'object' || value[0] === null) {
+        lines.push(`${label}: ${value.join(', ')}`);
+      } else {
+        lines.push(`${label}:`);
+        for (const item of value) {
+          const parts = Object.entries(item).map(([k, v]) => `${toLabel(k)}: ${v}`);
+          lines.push(`  - ${parts.join(' | ')}`);
+        }
+      }
+    } else {
+      lines.push(`${label}: ${value}`);
+    }
+  }
+  return lines.join('\n');
+}
+
+function includeWTrackerLiteMessages(messages: any[], settings: ExtensionSettings): any[] {
+  const copyMessages = structuredClone(messages);
+  if (settings.includeLastXWTrackerLiteMessages > 0) {
+    for (let i = 0; i < settings.includeLastXWTrackerLiteMessages; i++) {
       let foundIndex = -1;
       for (let j = copyMessages.length - 2; j >= 0; j--) {
         // -2 to skip current message
         const message = copyMessages[j];
-        const extra = 'source' in message ? (message as Message).source?.extra : (message as ChatMessage).extra;
-        // @ts-ignore
-        if (!message.wTrackerFound && extra?.[EXTENSION_KEY]?.[CHAT_MESSAGE_SCHEMA_VALUE_KEY]) {
-          // @ts-ignore
+        if (!message.wTrackerFound && message.extra?.[EXTENSION_KEY]?.[CHAT_MESSAGE_SCHEMA_VALUE_KEY]) {
           message.wTrackerFound = true;
-          foundMessage = message;
           foundIndex = j;
           break;
         }
       }
-      if (foundMessage) {
-        const extra =
-          'source' in foundMessage ? (foundMessage as Message).source?.extra : (foundMessage as ChatMessage).extra;
-        const content = `Tracker:\n\`\`\`json\n${JSON.stringify(extra?.[EXTENSION_KEY]?.[CHAT_MESSAGE_SCHEMA_VALUE_KEY] || '{}', null, 2)}\n\`\`\``;
-        copyMessages.splice(foundIndex + 1, 0, {
-          content,
-          role: 'user',
-          name: name1,
-          is_user: true,
-          mes: content,
-          is_system: false,
-        } as unknown as T);
+      if (foundIndex !== -1) {
+        const trackerValue = copyMessages[foundIndex].extra[EXTENSION_KEY][CHAT_MESSAGE_SCHEMA_VALUE_KEY];
+        const content = formatTrackerForContext(trackerValue);
+        copyMessages.splice(foundIndex + 1, 0, { role: 'user', content, is_user: true, mes: content, is_system: false });
       }
     }
   }
@@ -117,7 +129,7 @@ async function deleteTracker(messageId: number) {
     delete message.extra[EXTENSION_KEY];
     await globalContext.saveChat();
     renderTracker(messageId); // This will remove the rendered tracker
-    st_echo('success', 'Tracker data deleted.');
+    toastr.success('Tracker data deleted.');
   }
 }
 
@@ -129,8 +141,8 @@ async function editTracker(messageId: number) {
 
   const popupContent = `
         <div style="display: flex; flex-direction: column; gap: 8px;">
-            <label for="wtracker-edit-textarea">Edit Tracker JSON:</label>
-            <textarea id="wtracker-edit-textarea" class="text_pole" rows="15" style="width: 100%; resize: vertical;"></textarea>
+            <label for="wtrackerlite-edit-textarea">Edit Tracker JSON:</label>
+            <textarea id="wtrackerlite-edit-textarea" class="text_pole" rows="15" style="width: 100%; resize: vertical;"></textarea>
         </div>
     `;
 
@@ -138,7 +150,7 @@ async function editTracker(messageId: number) {
     okButton: 'Save',
     onClose: async (popup) => {
       if (popup.result === POPUP_RESULT.AFFIRMATIVE) {
-        const textarea = popup.content.querySelector('#wtracker-edit-textarea') as HTMLTextAreaElement;
+        const textarea = popup.content.querySelector('#wtrackerlite-edit-textarea') as HTMLTextAreaElement;
         if (textarea) {
           try {
             const newData = JSON.parse(textarea.value);
@@ -147,14 +159,14 @@ async function editTracker(messageId: number) {
             await globalContext.saveChat();
             let detailsState: boolean[] = [];
             const messageBlock = document.querySelector(`.mes[mesid="${messageId}"]`);
-            const existingTracker = messageBlock?.querySelector('.mes_wtracker');
+            const existingTracker = messageBlock?.querySelector('.mes_wtrackerlite');
             if (existingTracker) {
               const detailsElements = existingTracker.querySelectorAll('details');
               detailsState = Array.from(detailsElements).map((detail) => detail.open);
             }
             renderTracker(messageId);
             if (detailsState.length > 0) {
-              const newTracker = messageBlock?.querySelector('.mes_wtracker');
+              const newTracker = messageBlock?.querySelector('.mes_wtrackerlite');
               if (newTracker) {
                 const newDetailsElements = newTracker.querySelectorAll('details');
                 newDetailsElements.forEach((detail, index) => {
@@ -165,38 +177,34 @@ async function editTracker(messageId: number) {
                 });
               }
             }
-            st_echo('success', 'Tracker data updated.');
+            toastr.success('Tracker data updated.');
           } catch (e) {
             console.error('Error parsing new tracker data:', e);
-            st_echo('error', 'Invalid JSON. Changes were not saved.');
+            toastr.error('Invalid JSON. Changes were not saved.');
           }
         }
       }
     },
   });
-  const textarea = document.querySelector('#wtracker-edit-textarea') as HTMLTextAreaElement;
+  const textarea = document.querySelector('#wtrackerlite-edit-textarea') as HTMLTextAreaElement;
   if (textarea) {
     textarea.value = JSON.stringify(currentData, null, 2);
   }
 }
 
 async function generateTracker(id: number) {
-  const message = globalContext.chat[id];
-  if (!message) return st_echo('error', `Message with ID ${id} not found.`);
+  const context = SillyTavern.getContext();
+  const message = context.chat[id];
+  if (!message) return toastr.error(`Message with ID ${id} not found.`);
 
-  if (pendingRequests.has(id)) {
-    const requestId = pendingRequests.get(id)!;
-    generator.abortRequest(requestId);
-    st_echo('info', 'Tracker generation cancelled.');
-    return;
+  if (context.extensionSettings.disabledExtensions?.includes('connection-manager')) {
+    return toastr.error('The Connection Manager extension must be enabled to use WTrackerLite.');
   }
 
   const settings = settingsManager.getSettings();
-  if (!settings.profileId) return st_echo('error', 'Please select a connection profile in settings.');
-  const context = SillyTavern.getContext();
+  if (!settings.profileId) return toastr.error('Please select a connection profile in WTrackerLite settings.');
+
   const chatMetadata = context.chatMetadata;
-  const { extensionSettings, CONNECT_API_MAP, saveChat } = globalContext;
-  // Ensure chat metadata is initialized
   chatMetadata[EXTENSION_KEY] = chatMetadata[EXTENSION_KEY] || {};
   chatMetadata[EXTENSION_KEY][CHAT_METADATA_SCHEMA_PRESET_KEY] =
     chatMetadata[EXTENSION_KEY][CHAT_METADATA_SCHEMA_PRESET_KEY] || settings.schemaPreset;
@@ -204,17 +212,12 @@ async function generateTracker(id: number) {
   const chatJsonValue = settings.schemaPresets[settings.schemaPreset].value;
   const chatHtmlValue = settings.schemaPresets[settings.schemaPreset].html;
 
-  const profile = extensionSettings.connectionManager?.profiles?.find((p) => p.id === settings.profileId);
-  const apiMap = profile?.api ? CONNECT_API_MAP[profile.api] : null;
-  let characterId = characters.findIndex((char: any) => char.avatar === message.original_avatar);
-  characterId = characterId !== -1 ? characterId : undefined;
-
   const messageBlock = document.querySelector(`.mes[mesid="${id}"]`);
-  const mainButton = messageBlock?.querySelector('.mes_wtracker_button');
-  const regenerateButton = messageBlock?.querySelector('.wtracker-regenerate-button');
+  const mainButton = messageBlock?.querySelector('.mes_wtrackerlite_button');
+  const regenerateButton = messageBlock?.querySelector('.wtrackerlite-regenerate-button');
 
   let detailsState: boolean[] = [];
-  const existingTracker = messageBlock?.querySelector('.mes_wtracker');
+  const existingTracker = messageBlock?.querySelector('.mes_wtrackerlite');
   if (existingTracker) {
     const detailsElements = existingTracker.querySelectorAll('details');
     detailsState = Array.from(detailsElements).map((detail) => detail.open);
@@ -223,78 +226,41 @@ async function generateTracker(id: number) {
     mainButton?.classList.add('spinning');
     regenerateButton?.classList.add('spinning');
 
-    const promptResult = await buildPrompt(apiMap?.selected!, {
-      targetCharacterId: characterId,
-      messageIndexesBetween: {
-        end: id,
-        start: settings.includeLastXMessages > 0 ? Math.max(0, id - settings.includeLastXMessages) : 0,
-      },
-      presetName: profile?.preset,
-      contextName: profile?.context,
-      instructName: profile?.instruct,
-      syspromptName: profile?.sysprompt,
-      includeNames: !!selected_group,
+    // Build chat history slice
+    const startIndex = settings.includeLastXMessages > 0 ? Math.max(0, id - settings.includeLastXMessages) : 0;
+    const chatSlice = context.chat.slice(startIndex, id + 1);
+
+    // Inject previous tracker context messages into the slice
+    const augmented = includeWTrackerLiteMessages(chatSlice, settings);
+
+    // Convert to {role, content}[] for sendRequest
+    const messages: { role: string; content: string }[] = augmented.map((msg: any) => ({
+      role: msg.is_user || msg.role === 'user' ? 'user' : 'assistant',
+      content: msg.content || msg.mes || '',
+    }));
+
+    // Append the final JSON prompt
+    const exampleResponse = schemaToExample(chatJsonValue);
+    const finalPrompt = Handlebars.compile(settings.promptJson, { noEscape: true, strict: true })({
+      schema: JSON.stringify(chatJsonValue, null, 2),
+      example_response: exampleResponse,
     });
-    let messages = includeWTrackerMessages(promptResult.result, settings);
-    let response: ExtractedData['content'];
+    messages.push({ role: 'user', content: finalPrompt });
 
-    const makeRequest = (requestMessages: Message[], overideParams?: any): Promise<ExtractedData | undefined> => {
-      return new Promise((resolve, reject) => {
-        const abortController = new AbortController();
-        generator.generateRequest(
-          {
-            profileId: settings.profileId,
-            prompt: requestMessages,
-            maxTokens: settings.maxResponseToken,
-            custom: { signal: abortController.signal },
-            overridePayload: {
-              ...overideParams,
-            },
-          },
-          {
-            abortController,
-            onStart: (requestId) => {
-              pendingRequests.set(id, requestId);
-            },
-            onFinish: (requestId, data, error) => {
-              pendingRequests.delete(id);
-              if (error) {
-                return reject(error);
-              }
-              if (!data) {
-                // This is how Generator signals cancellation without an error object
-                return reject(new DOMException('Request aborted by user', 'AbortError'));
-              }
-              resolve(data as ExtractedData | undefined);
-            },
-          },
-        );
-      });
-    };
+    toastr.info('WTrackerLite: Generating tracker...');
+    const result = await (context as any).ConnectionManagerRequestService.sendRequest(settings.profileId, messages);
+    if (!result?.content) throw new Error('No response content received.');
 
-    if (settings.promptEngineeringMode === PromptEngineeringMode.NATIVE) {
-      messages.push({ content: settings.prompt, role: 'user' });
-      const result = await makeRequest(messages, {
-        json_schema: { name: 'SceneTracker', strict: true, value: chatJsonValue },
-      });
-      // @ts-ignore
-      response = result?.content;
-    } else {
-      const format = settings.promptEngineeringMode as 'json' | 'xml';
-      const promptTemplate = format === 'json' ? settings.promptJson : settings.promptXml;
-      const exampleResponse = schemaToExample(chatJsonValue, format);
-      const finalPrompt = Handlebars.compile(promptTemplate, { noEscape: true, strict: true })({
-        schema: JSON.stringify(chatJsonValue, null, 2),
-        example_response: exampleResponse,
-      });
-      messages.push({ content: finalPrompt, role: 'user' });
-      const rest = await makeRequest(messages);
-      if (!rest?.content) throw new Error('No response content received.');
-      // @ts-ignore
-      response = parseResponse(rest.content, format, { schema: chatJsonValue });
+    let response: object;
+    try {
+      response = parseResponse(result.content as string);
+    } catch (parseError: any) {
+      parseError.isParseError = true;
+      toastr.error(`WTrackerLite: Failed to parse response — ${parseError.message}`);
+      throw parseError;
     }
 
-    if (!response || Object.keys(response as any).length === 0) throw new Error('Empty response from WTracker.');
+    if (!response || Object.keys(response as any).length === 0) throw new Error('Empty response from WTrackerLite.');
 
     // Tentatively update message and try to render
     message.extra = message.extra || {};
@@ -306,7 +272,7 @@ async function generateTracker(id: number) {
       renderTracker(id);
 
       if (detailsState.length > 0) {
-        const newTracker = messageBlock?.querySelector('.mes_wtracker');
+        const newTracker = messageBlock?.querySelector('.mes_wtrackerlite');
         if (newTracker) {
           const newDetailsElements = newTracker.querySelectorAll('details');
           newDetailsElements.forEach((detail, index) => {
@@ -319,7 +285,7 @@ async function generateTracker(id: number) {
       }
 
       // If render succeeds, save the chat
-      await saveChat();
+      await context.saveChat();
     } catch (renderError) {
       // If render fails, remove the tracker data we just added
       delete message.extra[EXTENSION_KEY];
@@ -329,9 +295,9 @@ async function generateTracker(id: number) {
       throw new Error(`Generated data failed to render with the current template. Not saved.`);
     }
   } catch (error: any) {
-    if (error.name !== 'AbortError') {
-      console.error('Error generating tracker:', error);
-      st_echo('error', `Tracker generation failed: ${(error as Error).message}`);
+    console.error('Error generating tracker:', error);
+    if (!(error as any).isParseError) {
+      toastr.error(`WTrackerLite: Generation failed — ${(error as Error).message}`);
     }
   } finally {
     mainButton?.classList.remove('spinning');
@@ -342,10 +308,10 @@ async function generateTracker(id: number) {
 // --- UI Initialization (Non-React parts) ---
 
 async function initializeGlobalUI() {
-  // Add WTracker icon to message buttons
+  // Add WTrackerLite icon to message buttons
   const wTrackerIcon = document.createElement('div');
-  wTrackerIcon.title = 'WTracker';
-  wTrackerIcon.className = 'mes_button mes_wtracker_button fa-solid fa-truck-moving interactable';
+  wTrackerIcon.title = 'WTrackerLite';
+  wTrackerIcon.className = 'mes_button mes_wtrackerlite_button fa-solid fa-truck-moving interactable';
   wTrackerIcon.tabIndex = 0;
   document.querySelector('#message_template .mes_buttons .extraMesButtons')?.prepend(wTrackerIcon);
 
@@ -358,41 +324,44 @@ async function initializeGlobalUI() {
     const messageId = Number(messageEl.getAttribute('mesid'));
     if (isNaN(messageId)) return;
 
-    if (target.classList.contains('mes_wtracker_button')) {
+    if (target.classList.contains('mes_wtrackerlite_button')) {
       generateTracker(messageId);
-    } else if (target.classList.contains('wtracker-edit-button')) {
+    } else if (target.classList.contains('wtrackerlite-edit-button')) {
       editTracker(messageId);
-    } else if (target.classList.contains('wtracker-regenerate-button')) {
+    } else if (target.classList.contains('wtrackerlite-regenerate-button')) {
       generateTracker(messageId);
-    } else if (target.classList.contains('wtracker-delete-button')) {
+    } else if (target.classList.contains('wtrackerlite-delete-button')) {
       deleteTracker(messageId);
     }
   });
 
   const extensionsMenu = document.querySelector('#extensionsMenu');
   const buttonContainer = document.createElement('div');
-  buttonContainer.id = 'wtracker_menu_buttons';
+  buttonContainer.id = 'wtrackerlite_menu_buttons';
   buttonContainer.className = 'extension_container';
   extensionsMenu?.appendChild(buttonContainer);
-  const buttonHtml = await globalContext.renderExtensionTemplateAsync(
-    `third-party/${extensionName}`,
-    'templates/buttons',
+  buttonContainer.insertAdjacentHTML(
+    'beforeend',
+    `<div id="wtrackerlite_modify_schema_preset" class="list-group-item flex-container flexGap5">
+      <div class="fa-solid fa-truck-moving extensionsMenuExtensionButton"></div>
+      <span>Modify WTrackerLite schema</span>
+    </div>`,
   );
-  buttonContainer.insertAdjacentHTML('beforeend', buttonHtml);
-  extensionsMenu?.querySelector('#wtracker_modify_schema_preset')?.addEventListener('click', async () => {
+  extensionsMenu?.querySelector('#wtrackerlite_modify_schema_preset')?.addEventListener('click', async () => {
     await modifyChatMetadata();
   });
 
   // Set up event listeners for auto-mode and chat changes
-  const settings = settingsManager.getSettings();
-  globalContext.eventSource.on(
-    EventNames.CHARACTER_MESSAGE_RENDERED,
-    (messageId: number) => incomingTypes.includes(settings.autoMode) && generateTracker(messageId),
-  );
-  globalContext.eventSource.on(
-    EventNames.USER_MESSAGE_RENDERED,
-    (messageId: number) => outgoingTypes.includes(settings.autoMode) && generateTracker(messageId),
-  );
+  globalContext.eventSource.on(EventNames.CHARACTER_MESSAGE_RENDERED, (messageId: number) => {
+    const s = settingsManager.getSettings();
+    if (s.skipFirst && globalContext.chat.length <= 1) return;
+    if (incomingTypes.includes(s.autoMode)) generateTracker(messageId);
+  });
+  globalContext.eventSource.on(EventNames.USER_MESSAGE_RENDERED, (messageId: number) => {
+    const s = settingsManager.getSettings();
+    if (s.skipFirst && globalContext.chat.length <= 1) return;
+    if (outgoingTypes.includes(s.autoMode)) generateTracker(messageId);
+  });
   globalContext.eventSource.on(EventNames.CHAT_CHANGED, () => {
     const { saveChat } = globalContext;
     let chatModified = false;
@@ -400,8 +369,8 @@ async function initializeGlobalUI() {
       try {
         renderTracker(i);
       } catch (error) {
-        console.error(`Error rendering WTracker on message ${i}, removing data:`, error);
-        st_echo('error', 'A WTracker template failed to render. Removing tracker from the message.');
+        console.error(`Error rendering WTrackerLite on message ${i}, removing data:`, error);
+        toastr.error('A WTrackerLite template failed to render. Removing tracker from the message.');
         if (message?.extra?.[EXTENSION_KEY]) {
           delete message.extra[EXTENSION_KEY];
           chatModified = true;
@@ -414,8 +383,8 @@ async function initializeGlobalUI() {
   });
 
   // Register the global generation interceptor
-  (globalThis as any).wtrackerGenerateInterceptor = (chat: ChatMessage[]) => {
-    const newChat = includeWTrackerMessages(chat, settingsManager.getSettings());
+  (globalThis as any).wtrackerliteGenerateInterceptor = (chat: any[]) => {
+    const newChat = includeWTrackerLiteMessages(chat, settingsManager.getSettings());
     chat.length = 0;
     chat.push(...newChat);
   };
@@ -434,33 +403,25 @@ async function modifyChatMetadata() {
   }
   const currentPresetKey = chatMetadata[EXTENSION_KEY][CHAT_METADATA_SCHEMA_PRESET_KEY];
 
-  // Prepare data for the Handlebars template
-  const templateData = {
-    presets: Object.entries(settings.schemaPresets).map(([key, preset]) => ({
-      key: key,
-      name: preset.name,
-      selected: key === currentPresetKey,
-    })),
-  };
-
-  // Render the popup content from the template file
-  const popupContent = await globalContext.renderExtensionTemplateAsync(
-    'third-party/SillyTavern-WTracker',
-    'templates/modify_schema_popup',
-    templateData,
-  );
+  const presetOptions = Object.entries(settings.schemaPresets)
+    .map(([key, preset]) => `<option value="${key}"${key === currentPresetKey ? ' selected' : ''}>${preset.name}</option>`)
+    .join('');
+  const popupContent = `<div style="display: flex; flex-direction: column; gap: 8px;">
+    <label for="wtrackerlite-chat-schema-select">Select the schema preset for this chat:</label>
+    <select id="wtrackerlite-chat-schema-select" class="text_pole">${presetOptions}</select>
+  </div>`;
 
   await globalContext.callGenericPopup(popupContent, POPUP_TYPE.CONFIRM, '', {
     okButton: 'Save',
     onClose(popup) {
       if (popup.result === POPUP_RESULT.AFFIRMATIVE) {
-        const selectElement = document.getElementById('wtracker-chat-schema-select') as HTMLSelectElement;
+        const selectElement = document.getElementById('wtrackerlite-chat-schema-select') as HTMLSelectElement;
         if (selectElement) {
           const newPresetKey = selectElement.value;
           if (newPresetKey !== currentPresetKey) {
             chatMetadata[EXTENSION_KEY][CHAT_METADATA_SCHEMA_PRESET_KEY] = newPresetKey;
             context.saveMetadataDebounced();
-            st_echo('success', `Chat schema preset updated to "${settings.schemaPresets[newPresetKey].name}".`);
+            toastr.success(`Chat schema preset updated to "${settings.schemaPresets[newPresetKey].name}".`);
           }
         }
       }
@@ -473,21 +434,21 @@ async function modifyChatMetadata() {
 function renderReactSettings() {
   const settingsContainer = document.getElementById('extensions_settings');
   if (!settingsContainer) {
-    console.error('WTracker: Extension settings container not found.');
+    console.error('WTrackerLite: Extension settings container not found.');
     return;
   }
 
-  let reactRootEl = document.getElementById('wtracker-react-settings-root');
+  let reactRootEl = document.getElementById('wtrackerlite-react-settings-root');
   if (!reactRootEl) {
     reactRootEl = document.createElement('div');
-    reactRootEl.id = 'wtracker-react-settings-root';
+    reactRootEl.id = 'wtrackerlite-react-settings-root';
     settingsContainer.appendChild(reactRootEl);
   }
 
   const root = createRoot(reactRootEl);
   root.render(
     <React.StrictMode>
-      <WTrackerSettings />
+      <WTrackerLiteSettings />
     </React.StrictMode>,
   );
 }
@@ -502,5 +463,5 @@ settingsManager
   .then(main)
   .catch((error) => {
     console.error(error);
-    st_echo('error', 'WTracker data migration failed. Check console for details.');
+    toastr.error('WTrackerLite data migration failed. Check console for details.');
   });
