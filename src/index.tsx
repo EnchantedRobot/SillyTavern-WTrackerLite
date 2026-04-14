@@ -311,7 +311,7 @@ async function initializeGlobalUI() {
   // Add WTrackerLite icon to message buttons
   const wTrackerIcon = document.createElement('div');
   wTrackerIcon.title = 'WTrackerLite';
-  wTrackerIcon.className = 'mes_button mes_wtrackerlite_button fa-solid fa-truck-moving interactable';
+  wTrackerIcon.className = 'mes_button mes_wtrackerlite_button fa-solid fa-magnifying-glass-chart interactable';
   wTrackerIcon.tabIndex = 0;
   document.querySelector('#message_template .mes_buttons .extraMesButtons')?.prepend(wTrackerIcon);
 
@@ -343,7 +343,7 @@ async function initializeGlobalUI() {
   buttonContainer.insertAdjacentHTML(
     'beforeend',
     `<div id="wtrackerlite_modify_schema_preset" class="list-group-item flex-container flexGap5">
-      <div class="fa-solid fa-truck-moving extensionsMenuExtensionButton"></div>
+      <div class="fa-solid fa-magnifying-glass-chart extensionsMenuExtensionButton"></div>
       <span>Modify WTrackerLite schema</span>
     </div>`,
   );

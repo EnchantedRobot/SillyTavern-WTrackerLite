@@ -18,10 +18,6 @@ https://github.com/mjnitz02/SillyTavern-WTrackerLite
 
 ## FAQ
 
->I'm having API error.
-
-Your API/model might not support structured output. Change `Prompt Engineering` mode from `Native API` to `JSON` or `XML`.
-
 > What is the difference compared to [famous tracker](https://github.com/kaldigo/SillyTavern-Tracker)?
 
 Most importantly, it works. This is a minimalistic version of the original tracker.
@@ -32,7 +28,7 @@ Most importantly, it works. This is a minimalistic version of the original track
 - There are some templates in the original, but I don't need them since I don't have those features.
 
 
-> What is the difference compared to [famous tracker](https://github.com/bmen25124/SillyTavern-WTracker)?
+> What is the difference compared to [WTracker](https://github.com/bmen25124/SillyTavern-WTracker)?
 - Uses `ConnectionManagerRequestService` instead of legacy connection profiles.
 - JSON by default, removed the XML and Naive modes.
 - Streamlined generation prompts, templates and settings menus.
