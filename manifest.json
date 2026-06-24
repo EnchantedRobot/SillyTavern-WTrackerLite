@@ -5,8 +5,8 @@
     "optional": [],
     "js": "dist/index.js",
     "css": "dist/style.css",
-    "author": "mjnitz02, bmen25124",
+    "author": "EnchantedRobot",
     "version": "0.2.0",
-    "homePage": "https://github.com/mjnitz02/SillyTavern-WTrackerLite",
+    "homePage": "https://github.com/EnchantedRobot/SillyTavern-WTrackerLite",
     "generate_interceptor": "wtrackerliteGenerateInterceptor"
 }
